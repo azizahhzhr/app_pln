@@ -1,101 +1,260 @@
-import Image from "next/image";
+"use client";
+
+import useMouse from "@react-hook/mouse-position";
+import Modal from "react-modal";
+import { FormEvent, useRef, useState, useEffect } from "react";
+import axios from "axios";
+
+const customStyles = {
+  content: {
+    top: "50%",
+    left: "50%",
+    right: "auto",
+    bottom: "auto",
+    marginRight: "-50%",
+    transform: "translate(-50%, -50%)",
+  },
+};
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [coorX1, setCoorX1] = useState<number | null>(null);
+  const [coorY1, setCoorY1] = useState<number | null>(null);
+  const [coorX2, setCoorX2] = useState<number | null>(null);
+  const [coorY2, setCoorY2] = useState<number | null>(null);
+  const [modal, setModal] = useState(false);
+  const [isUpdate, setIsUpdate] = useState(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const [id, setId] = useState("");
+  const [ket, setKet] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
+  const [savedData, setSavedData] = useState<
+    {
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      id: string;
+      keterangan: string; // Pastikan ini sesuai dengan field di database
+    }[]
+  >([]);
+
+  const ref = useRef(null);
+  const mouse = useMouse(ref, {
+    enterDelay: 100,
+    leaveDelay: 100,
+  });
+
+  // Fetch data from database when component mounts
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const response = await axios.get("/api/get");
+        setSavedData(response.data.data); // Set saved data
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    }
+    fetchData();
+  }, []);
+
+  function openModal() {
+    setModal(true);
+  }
+
+  function closeModal() {
+    setModal(false);
+    setCoorX1(null);
+    setCoorY1(null);
+    setCoorX2(null);
+    setCoorY2(null);
+    setId("");
+    setKet("");
+    setIsUpdate(false);
+  }
+
+  function isWithinRectangle(
+    x: number,
+    y: number,
+    rect: { x1: number; y1: number; x2: number; y2: number }
+  ) {
+    const minX = Math.min(rect.x1, rect.x2);
+    const maxX = Math.max(rect.x1, rect.x2);
+    const minY = Math.min(rect.y1, rect.y2);
+    const maxY = Math.max(rect.y1, rect.y2);
+    return x >= minX && x <= maxX && y >= minY && y <= maxY;
+  }
+
+  function findExistingRectangle(x: number, y: number) {
+    return savedData.find((data) => isWithinRectangle(x, y, data));
+  }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+
+    if (!ket.trim()) {
+      alert("Keterangan tidak boleh kosong!");
+      return;
+    }
+
+    if (
+      coorX1 !== null &&
+      coorY1 !== null &&
+      coorX2 !== null &&
+      coorY2 !== null
+    ) {
+      try {
+        const payload = {
+          x1: coorX1,
+          y1: coorY1,
+          x2: coorX2,
+          y2: coorY2,
+          id,
+          keterangan: ket, // Pastikan ini sesuai dengan field di database
+        };
+
+        if (isUpdate) {
+          await axios.put(`/api/update/${id}`, payload, {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
+
+          setSavedData((prevData) =>
+            prevData.map((data) =>
+              data.id === id
+                ? {
+                    ...data,
+                    id,
+                    keterangan: ket, // Pastikan ini sesuai dengan field di database
+                    x1: coorX1,
+                    y1: coorY1,
+                    x2: coorX2,
+                    y2: coorY2,
+                  }
+                : data
+            )
+          );
+
+          setSuccessMessage("Update data berhasil!");
+        } else {
+          await axios.post("/api/tambah", payload, {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
+
+          setSavedData((prevData) => [...prevData, payload]);
+          setSuccessMessage("Data berhasil disimpan!");
+        }
+
+        closeModal();
+      } catch (e) {
+        console.error(e);
+      }
+    } else {
+      alert("Titik tidak lengkap!");
+    }
+  }
+
+  function handleCanvasClick() {
+    const x = mouse.x || 0;
+    const y = mouse.y || 0;
+
+    const existing = findExistingRectangle(x, y);
+    if (existing) {
+      setCoorX1(existing.x1);
+      setCoorY1(existing.y1);
+      setCoorX2(existing.x2);
+      setCoorY2(existing.y2);
+      setId(existing.id);
+      setKet(existing.keterangan); // Pastikan ini sesuai dengan field di database
+      setIsUpdate(true);
+      openModal();
+    } else if (coorX1 === null || coorY1 === null) {
+      setCoorX1(x);
+      setCoorY1(y);
+    } else if (coorX2 === null || coorY2 === null) {
+      setCoorX2(x);
+      setCoorY2(y);
+      openModal();
+    }
+  }
+
+  return (
+    <div
+      ref={ref}
+      className="min-h-screen text-black"
+      style={{
+        backgroundImage: "url('/background.JPG')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        position: "relative",
+      }}
+      onClick={handleCanvasClick}
+    >
+      <Modal
+        isOpen={modal}
+        onRequestClose={closeModal}
+        style={customStyles}
+        contentLabel="Example Modal"
+        ariaHideApp={false}
+      >
+        <form
+          className="flex flex-col text-black bg-white"
+          onSubmit={handleSubmit}
+        >
+          <button
+            type="button"
+            onClick={closeModal}
+            className="text-black ml-auto"
           >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+            x
+          </button>
+
+          <p className="text-center">
+            X1: {coorX1} | Y1: {coorY1}
+          </p>
+          <p className="text-center">
+            X2: {coorX2} | Y2: {coorY2}
+          </p>
+
+          <label htmlFor="id">ID</label>
+          <input
+            type="text"
+            className="border"
+            value={id}
+            onChange={(e) => setId(e.target.value)}
+            required
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
+
+          <label htmlFor="ket">Keterangan</label>
+          <textarea
+            className="border h-20"
+            value={ket}
+            onChange={(e) => setKet(e.target.value)}
+            required
           />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+          <button type="submit" className="bg-blue-500 mt-4 rounded">
+            {isUpdate ? "Update Data" : "Simpan Data"}
+          </button>
+        </form>
+      </Modal>
+
+      <div className="text-black h-screen">
+        <p>
+          X1: {coorX1 ?? "Belum"} | Y1: {coorY1 ?? "Belum"}
+        </p>
+        <p>
+          X2: {coorX2 ?? "Belum"} | Y2: {coorY2 ?? "Belum"}
+        </p>
+        {successMessage && (
+          <div className="fixed bottom-4 right-4 bg-green-500 text-white p-3 rounded shadow-lg">
+            {successMessage}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
