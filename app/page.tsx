@@ -186,9 +186,10 @@ export default function Home() {
       ref={ref}
       className="min-h-screen text-black"
       style={{
-        backgroundImage: "url('/background.JPG')",
-        backgroundSize: "cover",
+        backgroundImage: "url('/background.jpg')",
+        backgroundSize: "100% auto",
         backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
         position: "relative",
       }}
       onClick={handleCanvasClick}
